@@ -1,1 +1,4 @@
-return true
+a = 2
+b = 3
+15 + 3
+6 + a

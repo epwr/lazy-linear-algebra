@@ -8,7 +8,7 @@
 
 require_relative './ast.rb'
 require_relative './errors.rb'
-
+require_relative './operator_priorities.rb'
 
 
 class Parser
@@ -23,7 +23,7 @@ class Parser
 		program = []
 		while @tokens.peak and @tokens.peak.type != "EOF" # Not EOF
 			begin
-				#program.append(parse_next)
+				#program.append(parse_next)  # TODO: Revert comment (remove next 4 lines)
 				next_ast = parse_next
 				puts "#{next_ast}"
 				puts ""
@@ -126,21 +126,27 @@ class Parser
 	def parse_operation(cur_tok, cur_tok_is_ast=false)
 
 		if not cur_tok_is_ast
-			left_tok = parse_single_token cur_tok
+			left_ast = parse_single_token cur_tok
 		else
-			left_tok = cur_tok
+			left_ast = cur_tok
 		end
 
 		op = parse_single_token @tokens.next
-		right_tok = parse_next
-		if not right_tok
+		right_ast = parse_next
+		if not right_ast
 			throw_error("EOF occured while parsing the right side of an operator.", op)
 		elsif op.value == "="
-			return Assignment.new(cur_tok.line, cur_tok.col, left_tok, right_tok)
-		elsif right_tok.type == "Operation"
-			return Operation.new(cur_tok.line, cur_tok.col, [left_tok, op] + right_tok.expression)
+			return Assignment.new(cur_tok.line, cur_tok.col, left_ast, right_ast)
+		elsif right_ast.type == "Operation"
+			if get_operator_priority(op) <= get_operator_priority(right_ast.operator)
+				return Operation.new(cur_tok.line, cur_tok.col, left_ast, op, right_ast)
+			else
+				# Put this Operation in the left slot of the right_ast (because this AST node's priority is higher).
+				right_ast.left = Operation.new(cur_tok.line, cur_tok.col, left_ast, op, right_ast.left)
+				return right_ast
+			end
 		end
-		Operation.new(cur_tok.line, cur_tok.col, [left_tok, op, right_tok])
+		return Operation.new(cur_tok.line, cur_tok.col, left_ast, op, right_ast)
 	end
 
 	def parse_unary_operation cur_tok
@@ -249,7 +255,15 @@ class Parser
 			end
 		end
 		# TODO: Check that all rows are the same length. (maybe add the ability to right-pad with 0s?)
-		return Matrix.new(cur_tok.line, cur_tok.col, rows)
+
+		# Use look ahead to see if the Matrix should be inside an operation.
+		# This is the case when is_operation is true.
+		cur_ast = Matrix.new(cur_tok.line, cur_tok.col, rows)
+		if is_operation  
+			return parse_operation(cur_ast, true)
+		else
+			return cur_ast  
+		end
 	end
 
 	def parse_return_statement cur_tok

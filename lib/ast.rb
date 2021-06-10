@@ -5,8 +5,9 @@
 # Description:
 #    Defines the Abstract Syntax Tree for LAL. 
 
-class Node
+class UnitNode
 	def initialize (line, col)
+		@type = "UnitNode"
 		@line = line
 		@col = col
 	end
@@ -16,7 +17,7 @@ end
 
 # Program
 #    Holds a list of expressions to evaluate.
-class Program < Node
+class Program < UnitNode
 	def initialize (line, col, ast_list)
 		super(line, col)
 		@type = 'Program'
@@ -29,20 +30,21 @@ class Program < Node
 	end 
 end
 
-class Assignment < Node
+class Assignment < UnitNode
 	def initialize (line, col, left, right)
 		super(line, col)
 		@type = 'Assignment'
 		@left = left
 		@right = right
 	end
+	attr_reader :left, :right
 
 	def to_s
 		"<Assignment : #{@left} = #{@right}>"
 	end
 end
 
-class UnaryOperation < Node
+class UnaryOperation < UnitNode
 	def initialize (line, col, operator, right)
 		super(line, col)
 		@type = 'UnaryOperation'
@@ -55,20 +57,23 @@ class UnaryOperation < Node
 	end
 end
 
-class Operation < Node
-	def initialize (line, col, expression)
+class Operation < UnitNode
+	def initialize (line, col, left, operator, right)
 		super(line, col)
 		@type = 'Operation'
-		@expression = expression
+		@left = left
+		@operator = operator
+		@right = right
 	end
-	attr_reader :expression
+	attr_reader :left, :operator, :right
+	attr_writer :left
 
 	def to_s
-		"<Operation : #{@expression.each {|x| x.to_s + ", "}}>"
+		"<Operation : #{@left} #{@operator.value} #{@right}>"
 	end
 end
 
-class Operator < Node
+class Operator < UnitNode
 	def initialize (line, col, value)
 		super(line, col)
 		@type = 'Operator'
@@ -81,7 +86,7 @@ class Operator < Node
 	end
 end
 
-class Scalar < Node
+class Scalar < UnitNode
 	# TODO: Extend to complex numbers - somehow. Not sure how to parse that.
 	def initialize (line, col, value)
 		super(line, col)
@@ -95,13 +100,16 @@ class Scalar < Node
 	end
 end
 
-class Lambda < Node
+class Lambda < UnitNode
 	def initialize (line, col, args, body)
 		super(line, col)
 		@type = 'Function'
 		@args = args
 		@body = body
+		@env  = {}
 	end
+	attr_reader :args, :body, :env
+	attr_writer :env
 
 	def to_s
 		str = "<Lambda : Arg = ("
@@ -113,7 +121,7 @@ class Lambda < Node
 	end
 end
 
-class Call < Node
+class Call < UnitNode
 	def initialize (line, col, fnc_name, args)
 		super(line, col)
 		@type = 'Call'
@@ -126,7 +134,7 @@ class Call < Node
 	end
 end
 
-class IfThenElse < Node
+class IfThenElse < UnitNode
 	def initialize (line, col, condition, true_exp, false_exp=nil)
 		super(line, col)
 		@type = 'IfThenElse'
@@ -134,13 +142,14 @@ class IfThenElse < Node
 		@true_exp = true_exp
 		@false_exp = false_exp
 	end
+	attr_reader :condition, :true_exp, :false_exp
 
 	def to_s
 		"<IfThenElse : if: #{@condition} then: #{@true_exp} else: #{@false_exp}>"
 	end
 end
 
-class Boolean < Node
+class Boolean < UnitNode
 	def initialize (line, col, value)
 		super(line, col)
 		@type = 'Boolean'
@@ -156,19 +165,20 @@ class Boolean < Node
 	end
 end
 
-class Reference < Node
+class Reference < UnitNode
 	def initialize (line, col, name)
 		super(line, col)
 		@type = 'Reference'
 		@name = name
 	end
+	attr_reader :name
 
 	def to_s
 		"<Reference : #{@name}>"
 	end
 end
 
-class Tuple < Node
+class Tuple < UnitNode
 	def initialize (line, col, values)
 		super(line, col)
 		@type = 'Tuple'
@@ -180,7 +190,7 @@ class Tuple < Node
 	end
 end
 
-class Matrix < Node
+class Matrix < UnitNode
 	def initialize (line, col, values)
 		super(line, col)
 		@type = 'Matrix'
@@ -192,7 +202,7 @@ class Matrix < Node
 	end
 end
 
-class LiteralVariable < Node
+class LiteralVariable < UnitNode
 	def initialize (line, col, value)
 		super(line, col)
 		@type = 'LiteralVariable'
@@ -204,7 +214,7 @@ class LiteralVariable < Node
 	end
 end
 
-class ReturnStatement < Node
+class ReturnStatement < UnitNode
 	def initialize (line, col, value)
 		super(line, col)
 		@type = 'ReturnStatement'
@@ -216,7 +226,7 @@ class ReturnStatement < Node
 	end
 end
 
-class SetOperatorInfo < Node
+class SetOperatorInfo < UnitNode
 	def initialize (line, col, operator, type1, type2, priority, function)
 		super(line, col)
 		@type = 'SetOperatorInfo'

@@ -261,8 +261,10 @@ class TokenStream
 			rescue EOFError
 		 		return nil
 		 	end
-
-		 	if char == "\n"
+		 	
+		 	if char == nil
+		 		return nil
+			elsif char == "\n"
 		 		@chars.next
 		 		return @chars.peak
 		 	end

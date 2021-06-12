@@ -15,6 +15,10 @@ class CharacterStream
 		@cur_col  = 1
 	end
 
+	# peak
+	#
+	# Shows the next letter but keeps it on the 'stack' of letters. Returns nil if
+	# at the end of the file.
 	def peak
 		if @next_char == nil 
 			begin
@@ -27,6 +31,10 @@ class CharacterStream
 		end
 	end
 
+	# next
+	#
+	# Returns the next letter (and removes it from the 'stack'). Throws an
+	# EOFError if at the EOF.
 	def next
 		if @next_char == nil 
 			char = @char_stream.sysread(1)

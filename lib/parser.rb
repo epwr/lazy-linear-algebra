@@ -29,8 +29,10 @@ class Parser
 				puts ""
 				program.append(next_ast)
 			rescue => e
+				puts "..................."
 				puts e.message
 				puts e.backtrace
+				puts "..................."
 				error_free = false
 			end
 		end
@@ -88,9 +90,9 @@ class Parser
 		case cur_tok.type
 		when "Digit"
 			if cur_tok.value.include? "."
-				return Scalar.new(cur_tok.line, cur_tok.col, cur_tok.value.to_f)
+				return Term.new(cur_tok.line, cur_tok.col, magnitude: cur_tok.value.to_f)
 			else
-				return Scalar.new(cur_tok.line, cur_tok.col, cur_tok.value.to_i)
+				return Term.new(cur_tok.line, cur_tok.col, magnitude: cur_tok.value.to_i)
 			end
 		when "Identifier"
 			return Reference.new(cur_tok.line, cur_tok.col, cur_tok.value)
@@ -131,8 +133,14 @@ class Parser
 			left_ast = cur_tok
 		end
 
-		op = parse_single_token @tokens.next
-		right_ast = parse_next
+		if @tokens.peak.value == "-"
+			op = Operator.new(@tokens.peak.line, @tokens.peak.col, "+")
+			right_ast = parse_next
+		else	
+			op = parse_single_token @tokens.next
+			right_ast = parse_next
+		end 
+
 		if not right_ast
 			throw_error("EOF occured while parsing the right side of an operator.", op)
 		elsif op.value == "="
@@ -151,9 +159,14 @@ class Parser
 
 	def parse_unary_operation cur_tok
 
-		# Check if UnaryOperation or LiteralVariable
+		# Check if UnaryOperation or a Term.
 		if cur_tok and cur_tok.type == "Operator" and cur_tok.value == "`" and @tokens.peak and @tokens.peak.type == "Identifier"
-			cur_ast = LiteralVariable.new(cur_tok.line, cur_tok.col, @tokens.next.value)
+			if @tokens.peak.value == "i"
+				@tokens.next
+				cur_ast = Term.new(cur_tok.line, cur_tok.col, imaginary: true)  # No magnitude as default = 1
+			else
+				cur_ast = Term.new(cur_tok.line, cur_tok.col, literal_variable: @tokens.next.value)  # No magnitude as default = 1
+			end
 		else
 			cur_ast = UnaryOperation.new(cur_tok.line, cur_tok.col, parse_single_token(cur_tok), parse_next(true))
 		end
@@ -211,12 +224,15 @@ class Parser
 		SetOperatorInfo.new(cur_tok.line, cur_tok.col, operator, type1, type2, priority, function)
 	end
 
-	def parse_scalar cur_tok
-		return Scalar.new(cur_tok.line, cur_tok.col, cur_tok.value.to_f)
-	end
-
 	def parse_tuple cur_tok
-		return Tuple.new(cur_tok.line, cur_tok.col, splitter( nil, ")", ","))  # start=nil because "(" token has already been read.
+		cur_ast = Tuple.new(cur_tok.line, cur_tok.col, splitter( nil, ")", ","))  # start=nil because "(" token has already been read.
+
+		# Use look ahead to see if the tuple needs to be a child node of an operation.
+		if is_operation  
+			return parse_operation(cur_ast, true)
+		else
+			return cur_ast  
+		end
 	end
 
 	def parse_matrix cur_tok
@@ -287,8 +303,6 @@ class Parser
 
 	# CURRENT TOKEN
 	def is_unary_operation cur_tok  # An operator that only operates on the subsequent token.
-		
-		# TODO: Check for ` operator (create LiteralVariable class)
 		cur_tok.type == "Operator"
 	end
 

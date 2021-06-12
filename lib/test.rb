@@ -25,7 +25,7 @@ def test_parser
 
 end
 
-def test_interperter
+def test_interpreter
 
 	parser = Parser.new TokenStream.new 'test_files/small_test.pl'
 	program = parser.run
@@ -35,5 +35,6 @@ end
 
 # RUN TESTS
 
-test_interperter
+#test_parser
+test_interpreter
 

@@ -51,6 +51,7 @@ class UnaryOperation < UnitNode
 		@operator = operator
 		@right = right
 	end
+	attr_reader :operator, :right
 
 	def to_s
 		"<UnaryOperation : #{@operator} => #{@right}>"
@@ -86,17 +87,67 @@ class Operator < UnitNode
 	end
 end
 
-class Scalar < UnitNode
-	# TODO: Extend to complex numbers - somehow. Not sure how to parse that.
-	def initialize (line, col, value)
+
+# TermList
+#
+# An array of terms that should be summed together, but cannot be due
+# to containing different literal variables, or one being a real term
+# and the being an imaginary term. 
+class TermList < UnitNode
+	def initialize (line, col, terms)
 		super(line, col)
-		@type = 'Scalar'
-		@value = value
+		@type = 'TermList'
+		@terms = terms
 	end
-	attr_reader :value
+	attr_reader :terms
 
 	def to_s
-		return "<Scalar : #{@value}>"
+		str = "<TermList : "
+		@terms.each {|t| str += t.to_s + " + "}
+		@terms.length >= 1 ? str = str[0..-6] + ">" : ""
+		return str + ">"
+	end
+end
+
+
+# Term
+#
+# Contains a magnitude along either the real or the imaginary number line, and can
+# hold a literal variable which allows solving things with unknowns. The magnitude 
+# can be negative to point in the negative direction of the number line. Yes, this
+# means this is not actually a magnitude, but it works well in theory and practice
+# (and naming is hard).
+class Term < UnitNode
+	def initialize (line, col, magnitude: 1, imaginary: false, literal_variable: nil, lit_var_list: nil)	
+		super(line, col)
+		@type = 'Term'
+		@magnitude = magnitude
+		@imaginary = imaginary
+		# literal_variables is a 2D Array of [literal varible, exponent (should be a Term or TermList)]
+		if lit_var_list
+			@literal_variables = lit_var_list.sort
+		elsif literal_variable
+			@literal_variables = [[literal_variable, Term.new(-1,-1)]]  # Term.new(-1,-1) is == 1
+		else
+			@literal_variables = []
+		end
+	end
+	attr_reader :magnitude, :imaginary, :literal_variables, :lit_var_list
+
+	def to_s
+		if @magnitude == 0
+			return "<Term : 0>"
+		elsif @magnitude == 1 and (not @imaginary) and @literal_variables == []
+			return "<Term : 1>"
+		else
+			lit_var_str = ""
+			if @literal_variables != []
+				@literal_variables.each {|e|
+					lit_var_str += "#{e[0]}^ #{e[1].to_s}"
+				}	
+			end
+			return "<Term : #{@magnitude == 1 ? "" : @magnitude}#{@imaginary ? "i" : ""}#{lit_var_str}>"
+		end
 	end
 end
 
@@ -184,6 +235,7 @@ class Tuple < UnitNode
 		@type = 'Tuple'
 		@values = values
 	end
+	attr_reader :values
 
 	def to_s
 		"<Tuple : ( #{@values.each {|x| x.to_s + ", "}} )>"
@@ -199,18 +251,6 @@ class Matrix < UnitNode
 
 	def to_s
 		"<Matrix : [ #{@values.each {|x| "#{x}, "}} ]>"
-	end
-end
-
-class LiteralVariable < UnitNode
-	def initialize (line, col, value)
-		super(line, col)
-		@type = 'LiteralVariable'
-		@value = value
-	end
-
-	def to_s
-		"<LiteralVariable : #{value}>"
 	end
 end
 

@@ -360,10 +360,30 @@ class Matrix < UnitNode
 		super(line, col)
 		@type = 'Matrix'
 		@values = values
+		
+		@rows = values.length
+		@cols = values[0].length  # Matrices must be rectangular.
+
+		values.each { |row|
+			if row.length != @cols
+				raise "PARSING ERROR: At line: #{@line}, col: #{@col} >> Matrix created with inconsistent row length. "
+			end
+		}
 	end
+	attr_reader :values, :cols, :rows
 
 	def to_s
-		"<Matrix : [ #{@values.each {|x| "#{x}, "}} ]>"
+		m_str = "<Matrix : \n\t[\t" 
+		@values.each { |row|
+			m_str += "\t"
+			row.each{|element| 
+				m_str += element.to_s
+				m_str += ", "
+			}
+			m_str +="\n\t\t"
+		}
+		m_str += " ]>"
+		return m_str
 	end
 end
 

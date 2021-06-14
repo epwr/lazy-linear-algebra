@@ -15,9 +15,9 @@ require_relative "./ast.rb"
 ##        ##    ######  ####    ######      ##
 ##############################################
 #
-# => Get Unit Tests set up.
 # => Add Matrix stuff (see pg. 139 of main notebook)
 # => Add Calls and Lambdas
+# 		- add determinant of a matrix as a built in function
 
 
 def eval_program(program)
@@ -42,10 +42,12 @@ def eval_program_under(program, env, stack_trace)
 		value, env = eval_node_under(node, env, stack_trace)
 		# TODO: Remove debug stuff (below)
 		puts "----"
-		puts "  Value: #{value}"
-		env_str = ""
-		env.each {|k,v| env_str += "\n\t #{k} : #{v.to_s}"} 
-		puts "  Environment: #{env_str}"
+		puts "Value: #{value}"
+		#env_str = "Environment: \n"
+		#env.each{ |key, value|
+		#	env_str += "\t#{key}  =   #{value}\n"
+		#}
+		#puts env_str
 		puts "---------------------------------------------------------"
 	}
 	
@@ -131,11 +133,12 @@ def eval_operation(node, env, stack_trace)
 			return add_fraction_and_term_list(right, left), env
 		in [Fraction, Fraction]
 			return add_fraction_and_fraction(left, right), env	
-		else
+		in [Matrix, Matrix]
+			return add_two_matrices(left, right), env
 			throw_error("Operator '#{node.operator.value}' not implemented for left: #{left.type}, right: #{right.type}.", node, stack_trace) 
 		end
 	when "-"
-		puts "inter l: #{__LINE__} -- Note: Using a subtraction."  # TODO: Does this ever get used now that I've inverted a - b to a + (-b)?
+		puts "inter l: #{__LINE__} -- IMPORTANT NOTE: Using a subtraction."  # TODO: Does this ever get used now that I've inverted a - b to a + (-b)?
 		case [left, right]
 		in [Term, Term]
 			return subtract_two_terms(left, right), env
@@ -145,6 +148,8 @@ def eval_operation(node, env, stack_trace)
 			return subtract_term_from_term_list(right, left), env
 		in [TermList, TermList]
 			return subtract_term_list_from_term_list(left, right), env
+		in [Matrix, Matrix]
+			return subtract_matrix_minus_matrix(left, right), env
 		else
 			throw_error("Operator '#{node.operator.value}' not implemented for left: #{left.type}, right: #{right.type}.", node, stack_trace) 
 		end
@@ -168,6 +173,20 @@ def eval_operation(node, env, stack_trace)
 			return multiply_fraction_and_term_list(right, left), env
 		in [Fraction, Fraction]
 			return multiply_fraction_and_fraction(left, right), env	
+		in [Matrix, Matrix]
+			return multiply_two_matrices(left, right), env
+		in [Matrix, Term]
+			return multiply_matrix_and_term(left, right), env
+		in [Term, Matrix]
+			return multiply_matrix_and_term(right, left), env
+		in [Matrix, TermList]
+			return multiply_matrix_and_term_list(left, right), env
+		in [TermList, Matrix]
+			return multiply_matrix_and_term_list(right, left), env
+		in [Matrix, Fraction]
+			return multiply_matrix_and_fraction(left, right), env
+		in [Fraction, Matrix]
+			return multiply_matrix_and_fraction(right, left), env
 		else
 			throw_error("Operator '#{node.operator.value}' not implemented for left: #{left.type}, right: #{right.type}.", node, stack_trace) 
 		end
@@ -194,10 +213,16 @@ def eval_operation(node, env, stack_trace)
 		else
 			throw_error("Operator '#{node.operator.value}' not implemented for left: #{left.type}, right: #{right.type}.", node, stack_trace) 
 		end
+	when "*!"
+		case [left, right]
+		in [Matrix, Matrix]
+			return tensor_product_of_two_matrices(left, right), env
+		else
+			throw_error("Operator '#{node.operator.value}' not implemented for left: #{left.type}, right: #{right.type}.", node, stack_trace) 
+		end
 	else
 		throw_error("Operator '#{node.operator.value}' not implemented.", node, stack_trace) 
 	end
-
 end
 
 
@@ -206,10 +231,13 @@ def eval_unary_operation(node, env, stack_trace)
 	case node.operator.value
 	when "!"
 		value, _ = eval_node_under(node.right, env, stack_trace)
-		if value.type == "Boolean"
+		case value
+		in Boolean
 			return Boolean.new(value.line, value.col, !value.value), env
+		in Matrix
+			return invert_matrix(value)
 		else
-			throw_error("'!' operator called on a non-Boolean value.", node, stack_trace)
+			throw_error("UnaryOperator '#{node.operator.value}' not implemented for: #{value.type}.", node, stack_trace) 
 		end
 	when "-"
 		value, _ = eval_node_under(node.right, env, stack_trace)
@@ -220,6 +248,16 @@ def eval_unary_operation(node, env, stack_trace)
 			return flip_sign_on_term_list(value), env
 		in Fraction
 			return flip_sign_on_fraction(value), env
+		in Matrix
+			return multiply_matrix_and_term(value, Term.new(-1,-1, magnitude: -1))
+		else
+			throw_error("UnaryOperator '#{node.operator.value}' not implemented for: #{value.type}.", node, stack_trace) 
+		end
+	when "~"
+		value, _ = eval_node_under(node.right, env, stack_trace)
+		case value
+		in Matrix
+			return transpose_of_matrix(value), env
 		else
 			throw_error("UnaryOperator '#{node.operator.value}' not implemented for: #{value.type}.", node, stack_trace) 
 		end
@@ -282,7 +320,7 @@ end
 
 
 ##############################################################
-#                     Operations Helpers                     #
+#        Operations on Fractions, Terms, and TermList        #
 ##############################################################
 
 
@@ -712,6 +750,221 @@ def subtract_term_list_from_term_list(tl_left, tl_right)
 end
 
 
+##############################################################
+#                   Operations on Matrices                   #
+##############################################################
+
+# add_two_matrices
+#
+#
+def add_two_matrices(left, right)
+	
+	if left.rows != right.rows or left.cols != right.cols
+		throw_error("Matrix dimensions don't match when adding two matrices.", left, [])  # TODO: Add stack trace (make a global)
+	end
+
+	new_rows = []
+	for row_index in (0..left.rows - 1)
+		row = []
+		for col_index in (0..left.cols - 1)
+			case [left.values[row_index][col_index], right.values[row_index][col_index]]
+			in [Term, Term]
+				row.append(add_two_terms(left.values[row_index][col_index], right.values[row_index][col_index]))
+			in [Term, TermList]
+				row.append(add_term_and_term_list(left.values[row_index][col_index], right.values[row_index][col_index]))
+			in [TermList, Term]
+				row.append(add_term_and_term_list(right.values[row_index][col_index], left.values[row_index][col_index]))
+			in [TermList, TermList]
+				row.append(add_term_list_and_term_list(left.values[row_index][col_index], right.values[row_index][col_index]))
+			in [Fraction, Term]
+				row.append(add_fraction_and_term(left.values[row_index][col_index], right.values[row_index][col_index]))
+			in [Fraction, TermList]
+				row.append(add_fraction_and_term_list(left.values[row_index][col_index], right.values[row_index][col_index]))
+			in [Term, Fraction]
+				row.append(add_fraction_and_term(right.values[row_index][col_index], left.values[row_index][col_index]))
+			in [TermList, Fraction]
+				row.append(add_fraction_and_term_list(right.values[row_index][col_index], left.values[row_index][col_index]))
+			in [Fraction, Fraction]
+				row.append(add_fraction_and_fraction(left.values[row_index][col_index], right.values[row_index][col_index]))
+			else
+				throw_error("Matrix addition with matrices that don't contain only Terms, TermLists, and Fractions.", left, [])  # TODO: Add stack trace (make a global)
+			end
+		end
+		new_rows.append(row)
+	end
+	return Matrix.new(left.line, left.col, new_rows)
+end
+
+
+# subtract_matrix_minus_matrix
+#
+#
+def subtract_matrix_minus_matrix
+	raise "Not Implemented"  # TODO: I think I can remove this. because a + b => a + (-b)
+end
+
+
+# multiply_two_matrices
+#
+# Multiplies two matrices together and returns a new matrice. Matrices must have acceptable dimensions.
+def multiply_two_matrices(left, right)
+	
+	if left.cols != right.rows
+		throw_error("Matrix dimensions don't match when multiplying two matrices (left.cols must == right.rows).", left, [])  # TODO: Add stack trace (make a global)
+	end
+	right_as_cols = right.values.transpose
+
+	new_rows = []
+	for row_index in (0..left.rows - 1)
+		new_row = []
+		for col_index in (0..right.cols - 1)
+			row = left.values[row_index]
+			col = right_as_cols[col_index]
+
+			new_elem = Term.new(-1,-1, magnitude: 0)
+			for position in (0..row.length-1)
+				row_elem = row[position]
+				col_elem = col[position]
+				case [row_elem, col_elem]
+				in [Term, Term]
+					product = multiply_two_terms(row_elem, col_elem)
+				in [Term, TermList]
+					product = multiply_term_and_term_list(row_elem, col_elem)
+				in [TermList, Term]
+					product = multiply_term_and_term_list(col_elem, row_elem)
+				in [TermList, TermList]
+					product = multiply_term_list_and_term_list(row_elem, col_elem)
+				in [Fraction, Term]
+					product = multiply_fraction_and_term(row_elem, col_elem)
+				in [Fraction, TermList]
+					product = multiply_fraction_and_term_list(row_elem, col_elem)
+				in [Term, Fraction]
+					product = multiply_fraction_and_term(col_elem, row_elem)
+				in [TermList, Fraction]
+					product = multiply_fraction_and_term_list(col_elem, row_elem)
+				in [Fraction, Fraction]
+					product = multiply_fraction_and_fraction(row_elem, col_elem)
+				else
+					throw_error("Matrix addition with matrices that don't contain only Terms, TermLists, and Fractions.", left, [])  # TODO: Add stack trace (make a global)
+				end
+				# Add product to new elem
+				case [product, new_elem]
+				in [Term, Term]
+					new_elem = add_two_terms(product, new_elem)
+				in [Term, TermList]
+					new_elem = add_term_and_term_list(product, new_elem)
+				in [TermList, Term]
+					new_elem = add_term_and_term_list(new_elem, product)
+				in [TermList, TermList]
+					new_elem = add_term_list_and_term_list(product, new_elem)
+				in [Fraction, Term]
+					new_elem = add_fraction_and_term(product, new_elem)
+				in [Fraction, TermList]
+					new_elem = add_fraction_and_term_list(product, new_elem)
+				in [Term, Fraction]
+					new_elem = add_fraction_and_term(new_elem, product)
+				in [TermList, Fraction]
+					new_elem = add_fraction_and_term_list(new_elem, product)
+				in [Fraction, Fraction]
+					new_elem = add_fraction_and_fraction(product, new_elem)
+				else
+					throw_error("Matrix addition with matrices that don't contain only Terms, TermLists, and Fractions.", left, [])  # TODO: Add stack trace (make a global)
+				end
+			end
+			puts "i l: #{__LINE__} > found: #{new_elem}"
+			puts ""
+			new_row.append(new_elem)
+		end
+		new_rows.append(new_row)
+	end
+	return Matrix.new(left.line, left.col, new_rows)
+
+end
+
+
+# invert_matrix
+#
+#
+def invert_matrix
+	raise "Not Implemented"
+end
+
+
+# transpose_of_matrix
+#
+# Return the transpose of a matrix (as a new matrix)
+def transpose_of_matrix matrix
+	return Matrix.new(matrix.line, matrix.col, matrix.values.transpose)
+end
+
+
+# tensor_product_of_two_matrices
+#
+# Creates the tensor product of two matrices (returned as a new matrix).
+def tensor_product_of_two_matrices(mat1, mat2)
+
+	result_rows = []
+	mat1.values.each { |mat1_row| 
+		mat2.values.each { |mat2_row| 
+			
+			result_row = []
+			mat1_row.each { |mat1_elem|
+				mat2_row.each { |mat2_elem|
+					case [mat1_elem, mat2_elem]
+					in [Term, Term]
+						product = multiply_two_terms(mat1_elem, mat2_elem)
+					in [Term, TermList]
+						product = multiply_term_and_term_list(mat1_elem, mat2_elem)
+					in [TermList, Term]
+						product = multiply_term_and_term_list(mat2_elem, mat1_elem)
+					in [TermList, TermList]
+						product = multiply_term_list_and_term_list(mat1_elem, mat2_elem)
+					in [Fraction, Term]
+						product = multiply_fraction_and_term(mat1_elem, mat2_elem)
+					in [Fraction, TermList]
+						product = multiply_fraction_and_term_list(mat1_elem, mat2_elem)
+					in [Term, Fraction]
+						product = multiply_fraction_and_term(mat2_elem, mat1_elem)
+					in [TermList, Fraction]
+						product = multiply_fraction_and_term_list(mat2_elem, mat1_elem)
+					in [Fraction, Fraction]
+						product = multiply_fraction_and_fraction(mat1_elem, mat2_elem)
+					else
+						throw_error("Matrix addition with matrices that don't contain only Terms, TermLists, and Fractions.", left, [])  # TODO: Add stack trace (make a global)
+					end
+
+					result_row.append(product)
+				}
+			}
+			result_rows.append(result_row)
+		}
+	}
+	return Matrix.new(mat1.line, mat2.col, result_rows)
+end
+
+
+# multiply_matrix_and_term
+#
+#
+def multiply_matrix_and_term(matrix, term)
+	raise "Not Implemented: multiply_matrix_and_term()"
+end
+
+
+# multiply_matrix_and_term_list
+#
+#
+def multiply_matrix_and_term_list(matrix, term_list)
+	raise "Not Implemented: multiply_matrix_and_term_list()"
+end
+
+# multiply_matrix_and_fraction
+#
+#
+def multiply_matrix_and_fraction(matrix, fraction)
+	raise "Not Implemented: multiply_matrix_and_fraction()"
+end
+
 
 
 
@@ -800,4 +1053,6 @@ def throw_error(msg, cur_ast_node, stack_trace)
 		puts " " * index + element.to_s
 	}
 end
+
+
 

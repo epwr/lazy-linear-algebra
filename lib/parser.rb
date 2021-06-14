@@ -246,8 +246,8 @@ class Parser
 
 		rows = []
 		while true
-			row = []
-			expecting_comma = false
+			row = [ parse_next ]
+			expecting_comma = true
 
 			while true
 				if expecting_comma
@@ -261,7 +261,7 @@ class Parser
 					expecting_comma = false
 				else
 					if @tokens.is_end_of_line?
-						if row  
+						if row != []
 							throw_error("Expected token, got newline.", row[-1])
 						else
 							throw_error("Expected token, got newline. Line/col values of next token in file.", @tokens.peak)
@@ -387,7 +387,10 @@ class Parser
 		return vars
 	end
 
-	def throw_error msg, cur_tok
+	def throw_error(msg, cur_tok)
+		if cur_tok == nil
+			raise "PARSING ERROR WITH NIL TOKEN (ISSUE WITH PARSER???) >> " + msg
+		end
 		raise "PARSING ERROR: At line: #{cur_tok.line}, col: #{cur_tok.col}, token: #{cur_tok} >> " + msg
 	end
 

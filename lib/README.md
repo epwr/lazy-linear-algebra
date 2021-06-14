@@ -8,6 +8,8 @@
 	- Implement Priorities to Operations (eg. build AST based on priorities - have lots so that I can add operations in the future as needed). Ensure that ((2 + 3) * 4) is still parsed properly.
 	- Add Dirac Notation (parses into a matrix I think?)
 	- Add Strings (in parse_single_token -- should be straightforward on the parser end).
+	- Ensure that programmers can do anything the interpreter does, just with less syntax sugar.
+
 
 ## Notes for a Refactor / Reuse
 

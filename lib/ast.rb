@@ -44,6 +44,9 @@ class Assignment < UnitNode
 	end
 end
 
+# UnaryOperation
+#
+# An operation that affects only the next node.
 class UnaryOperation < UnitNode
 	def initialize (line, col, operator, right)
 		super(line, col)
@@ -97,15 +100,43 @@ class TermList < UnitNode
 	def initialize (line, col, terms)
 		super(line, col)
 		@type = 'TermList'
-		@terms = terms
+		@terms = terms.filter {|term| term.magnitude != 0}
+		# TODO: finish merge_like_terms and call here. 
+		@terms.sort
 	end
 	attr_reader :terms
 
 	def to_s
 		str = "<TermList : "
 		@terms.each {|t| str += t.to_s + " + "}
-		@terms.length >= 1 ? str = str[0..-6] + ">" : ""
+		@terms.length >= 1 ? str = str[0..-4]: ""
 		return str + ">"
+	end
+
+	def == other
+
+
+		if other.type == "Term" and @terms.length == 0 and other.magnitude == 0
+			return true
+		elsif other.type == "Term" and @terms.length == 1 and @terms[0] == other
+			return true
+		elsif @type != other.type or @terms.length != other.terms.length
+			return false
+		end
+
+		for i in (0..@terms.length - 1)
+			if i == -1 # if a list is empty
+				return true
+			elsif @terms[i] != other.terms[i]
+				return false
+			end
+		end	
+		return true
+	end
+
+	def merge_like_terms
+		# TODO: finish and call in the initialize method.
+		raise "ast l: #{__LINE__} > method not implemented."
 	end
 end
 
@@ -148,6 +179,88 @@ class Term < UnitNode
 			end
 			return "<Term : #{@magnitude == 1 ? "" : @magnitude}#{@imaginary ? "i" : ""}#{lit_var_str}>"
 		end
+	end
+
+	def same_literal_variables? other
+		if @literal_variables.length != other.literal_variables.length
+			return false
+		end
+		
+		for i in (0..@literal_variables.length - 1)
+			if @literal_variables[i][0] != other.literal_variables[i][0] or @literal_variables[i][1] != other.literal_variables[i][1] 
+				return false
+			end
+		end
+		return true
+	end
+
+	def == other
+		if other.type == "TermList"
+			return other == self
+		elsif @type != other.type or @magnitude != other.magnitude or @imaginary != other.imaginary or @literal_variables.length != other.literal_variables.length
+			return false
+		elsif @literal_variables.length == 0
+			return true
+		end
+
+		for i in (0..@literal_variables.length - 1)
+			if i == -1 # if list empty
+				return true
+			elsif @literal_variables[i][0] != other.literal_variables[i][0] or @literal_variables[i][1] != other.literal_variables[i][1] 
+				return false
+			end
+		end	
+	end
+
+	include Comparable
+	def <=> other
+		if (self.literal_variables <=> other.literal_variables) == 0
+			if (self.magnitude <=> other.magnitude) == 0
+				if self.imaginary == other.imaginary
+					return 0
+				elsif self.imaginary == true
+					return 1
+				else 
+					return -1
+				end
+			else
+				return self.magnitude <=> other.magnitude
+			end
+		else
+			return (self.literal_variables <=> other.literal_variables) 
+		end
+	end
+end
+
+# Fraction
+#
+# A simple fraction object. Can hold a Term or a TermList in either the
+# numerator or the denominator. 
+class Fraction < UnitNode
+	def initialize (line, col, numerator: 1, denominator: 1)
+		super(line, col)
+		@type = 'Fraction'
+		@numerator = numerator
+		@denominator = denominator
+
+		# TODO: Check denominator is not zero (empty TL, zero mag Term)
+
+		# TODO: basic simplifying. 
+		# => if numerator == 0, return Term.mag = 0
+		# => if term/term, remove like parts.
+		# => Longterm Goal: if denominator is TermList, have a GCD to identidfy what can be cancelled.
+	end
+	attr_reader :numerator, :denominator
+
+	def to_s
+		"<Fraction : #{@numerator} / #{@denominator}>"
+	end
+
+	def == other
+		if other.type != "Fraction"
+			return false
+		end
+		return (@numerator == other.numerator and @denominator == other.denominator)
 	end
 end
 

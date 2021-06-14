@@ -7,11 +7,17 @@
 
 require_relative "./ast.rb"
 
-# NOTES:
-# => Need to evaluate step by step (with a print_details() call between each step)
-# => In normal mode, this step by step is silent.
-# => How to set this up? Evaluate deepest nodes? But need to recusively check best step by looking horizontally.
-# 		=> Maybe draw a few ASTs and see how I would want to evaluate them manually. Look for algorithm.
+##############################################
+##      ######  ######  ####    ######      ##
+##        ##    ##  ##  ##  ##  ##  ##      ##
+##        ##    ##  ##  ##  ##  ##  ##      ##
+##        ##    ##  ##  ##  ##  ##  ##      ##
+##        ##    ######  ####    ######      ##
+##############################################
+#
+# => Get Unit Tests set up.
+# => Add Matrix stuff (see pg. 139 of main notebook)
+# => Add Calls and Lambdas
 
 
 def eval_program(program)
@@ -25,7 +31,26 @@ private
 #                       Generic Evals                        #
 ##############################################################
 
+def eval_program_under(program, env, stack_trace)
 
+	value = nil
+	program.each {|node| 
+		# TODO: Add in dealing with a return statement.
+		# TODO: Only allow parsing an Assignment from a program level (which covers function bodies)
+		# => Would REQUIRE having Programs as true_exp and false_exp in ifThenElses.
+		# => Would mean I don't need to pass the env back down the stack ever.
+		value, env = eval_node_under(node, env, stack_trace)
+		# TODO: Remove debug stuff (below)
+		puts "----"
+		puts "  Value: #{value}"
+		env_str = ""
+		env.each {|k,v| env_str += "\n\t #{k} : #{v.to_s}"} 
+		puts "  Environment: #{env_str}"
+		puts "---------------------------------------------------------"
+	}
+	
+	return value, env
+end
 
 def eval_node_under(node, env, stack_trace)
 	
@@ -37,6 +62,7 @@ def eval_node_under(node, env, stack_trace)
 	in TermList
 		return node, env
 	in Assignment
+		# TODO: Move to eval_program_under, and throw error here.
 		right, _ = eval_node_under(node.right, env, stack_trace)
 		env[node.left.name] = right
 		return UnitNode.new(node.line, node.col), env
@@ -54,7 +80,6 @@ def eval_node_under(node, env, stack_trace)
 		puts "Found Operator -> Not Implemented."
 		# TODO: Implement -- Maybe this is an error?
 	in UnaryOperation
-		puts "-- #{node}"
 		return eval_unary_operation(node, env, stack_trace)
 	in Lambda
 		node.env = env.clone  # Lexical Scope
@@ -78,30 +103,9 @@ end
 #                    Specific Node Evals                     #
 ##############################################################
 
-def eval_program_under(program, env, stack_trace)
-
-	value = nil
-	program.each {|node| 
-		# TODO: Add in dealing with a return statement.
-		# TODO: Only allow parsing an Assignment from a program level (which covers function bodies)
-		# => Would mean I don't need to pass the env back down the stack ever.
-		value, env = eval_node_under(node, env, stack_trace)
-		# TODO: Remove debug stuff (below)
-		puts "----"
-		puts "  Value: #{value}"
-		env_str = ""
-		env.each {|k,v| env_str += "\n\t #{k} : #{v.to_s}"} 
-		puts "  Environment: #{env_str}"
-		puts "----"
-	}
-	
-	return value, env
-end
-
-
 def eval_operation(node, env, stack_trace)
 
-	# Evaluate both sides of operation (discard environment return statement.)
+	# Evaluate both sides of operation (discard returned environment)
 	left, _ = eval_node_under(node.left, env, stack_trace)
 	right, _ = eval_node_under(node.right, env, stack_trace)
 
@@ -114,18 +118,33 @@ def eval_operation(node, env, stack_trace)
 		in [Term, TermList]
 			return add_term_and_term_list(left, right), env
 		in [TermList, Term]
-			return add_term_and_term_list(right, left), env
+			return add_term_and_term_list(left, right), env
+		in [TermList, TermList]
+			return add_term_list_and_term_list(left, right), env
+		in [Fraction, Term]
+			return add_fraction_and_term(left, right), env
+		in [Term, Fraction]
+			return add_fraction_and_term(right, left), env
+		in [Fraction, TermList]
+			return add_fraction_and_term_list(left, right), env
+		in [TermList, Fraction]
+			return add_fraction_and_term_list(right, left), env
+		in [Fraction, Fraction]
+			return add_fraction_and_fraction(left, right), env	
 		else
 			throw_error("Operator '#{node.operator.value}' not implemented for left: #{left.type}, right: #{right.type}.", node, stack_trace) 
 		end
 	when "-"
+		puts "inter l: #{__LINE__} -- Note: Using a subtraction."  # TODO: Does this ever get used now that I've inverted a - b to a + (-b)?
 		case [left, right]
 		in [Term, Term]
 			return subtract_two_terms(left, right), env
 		in [Term, TermList]
-			return subtract_term_list_from_term(left, right), env
+			return subtract_term_list_from_term(right, left), env
 		in [TermList, Term]
 			return subtract_term_from_term_list(right, left), env
+		in [TermList, TermList]
+			return subtract_term_list_from_term_list(left, right), env
 		else
 			throw_error("Operator '#{node.operator.value}' not implemented for left: #{left.type}, right: #{right.type}.", node, stack_trace) 
 		end
@@ -139,6 +158,16 @@ def eval_operation(node, env, stack_trace)
 			return multiply_term_and_term_list(left, right), env
 		in [TermList, TermList]
 			return multiply_term_list_and_term_list(left, right), env
+		in [Fraction, Term]
+			return multiply_fraction_and_term(left, right), env
+		in [Term, Fraction]
+			return multiply_fraction_and_term(right, left), env
+		in [Fraction, TermList]
+			return multiply_fraction_and_term_list(left, right), env
+		in [TermList, Fraction]
+			return multiply_fraction_and_term_list(right, left), env
+		in [Fraction, Fraction]
+			return multiply_fraction_and_fraction(left, right), env	
 		else
 			throw_error("Operator '#{node.operator.value}' not implemented for left: #{left.type}, right: #{right.type}.", node, stack_trace) 
 		end
@@ -150,6 +179,18 @@ def eval_operation(node, env, stack_trace)
 			return divide_term_by_term_list(left, right), env
 		in [TermList, Term]
 			return divide_term_list_by_term(left, right), env
+		in [TermList, TermList]
+			return divide_term_list_by_term_list(left, right), env
+		in [Fraction, Term]
+			return divide_fraction_by_term(left, right), env
+		in [Term, Fraction]
+			return divide_term_by_fraction(right, left), env
+		in [Fraction, TermList]
+			return divide_fraction_by_term_list(left, right), env
+		in [TermList, Fraction]
+			return divide_term_list_by_fraction(right, left), env
+		in [Fraction, Fraction]
+			return divide_fraction_by_fraction(left, right), env	
 		else
 			throw_error("Operator '#{node.operator.value}' not implemented for left: #{left.type}, right: #{right.type}.", node, stack_trace) 
 		end
@@ -175,12 +216,15 @@ def eval_unary_operation(node, env, stack_trace)
 		case value
 		in Term
 			return flip_sign_on_term(value), env
+		in TermList
+			return flip_sign_on_term_list(value), env
+		in Fraction
+			return flip_sign_on_fraction(value), env
 		else
-			puts "ERROR ----- Line: #{__LINE__} -- NOT IMPLEMENTED: Got: #{value}"
-			# TODO !!!!!!!!!!!!!
+			throw_error("UnaryOperator '#{node.operator.value}' not implemented for: #{value.type}.", node, stack_trace) 
 		end
 	else
-		throw_error("UnaryOperator '#{node.operator}' is not implemented.", node, stack_trace)
+		throw_error("UnaryOperator '#{node.operator.value}' is not implemented.", node, stack_trace)
 	end
 
 end
@@ -241,6 +285,48 @@ end
 #                     Operations Helpers                     #
 ##############################################################
 
+
+# add_fraction_and_fraction
+#
+#
+def add_fraction_and_fraction(frac1, frac2)
+	
+	puts "i l: #{__LINE__} > add_fraction_and_fraction"
+	puts "i l: #{__LINE__} > frac1: #{frac1}"
+	puts "i l: #{__LINE__} > frac2: #{frac1}"
+
+	if frac1.denominator != frac2.denominator
+		new_frac1_numerator = multiply_unknown_terms_or_term_lists(frac1.numerator, frac2.denominator)
+		new_frac2_numerator = multiply_unknown_terms_or_term_lists(frac2.numerator, frac1.denominator)
+		new_numerator = add_unknown_terms_or_term_lists(new_frac1_numerator, new_frac2_numerator)
+		new_denominator = multiply_unknown_terms_or_term_lists(frac1.denominator, frac2.denominator)
+		return Fraction.new(frac1.line, frac1.col, numerator: new_numerator, denominator: new_denominator)
+	end
+	new_numerator = add_unknown_terms_or_term_lists(frac1.numerator, frac2.numerator)
+	return Fraction.new(frac1.line, frac1.col, numerator: new_numerator, denominator: frac1.denominator)
+end
+
+
+# add_fraction_and_term_list
+#
+# Adds a term list into the numerator of a fraction.
+def add_fraction_and_term_list(fraction, term_list)
+	term_list_as_numerator = multiply_unknown_terms_or_term_lists(fraction.denominator, term_list)
+	new_numerator = add_unknown_terms_or_term_lists(fraction.numerator, term_list_as_numerator)
+	return Fraction.new(frac1.line, frac1.col, numerator: new_numerator, denominator: fraction.denominator)
+end
+
+
+# add_fraction_and_term	
+#
+# Adds a term into the numerator of a fraction.
+def add_fraction_and_term(fraction, term)
+	term_as_numerator = multiply_unknown_terms_or_term_lists(fraction.denominator, term)
+	new_numerator = add_unknown_terms_or_term_lists(fraction.numerator, term_as_numerator)
+	return Fraction.new(frac1.line, frac1.col, numerator: new_numerator, denominator: fraction.denominator)
+end
+
+
 # add_two_terms
 #
 # If both terms are imaginary or both not, and both have the same lit_var_list, then create a new term that
@@ -248,7 +334,7 @@ end
 def add_two_terms(left, right)
 	# If both imaginary or both real, with the same literal variables, then simply add together.
 	if left.literal_variables == right.literal_variables and left.imaginary == right.imaginary 
-			return Term.new(left.line, left.col, magnitude: left.magnitude + right.magnitude, imaginary: left.imaginary, lit_var_list: left.literal_variables)
+			return Term.new(left.line, left.col, magnitude: left.magnitude + right.magnitude, imaginary: left.imaginary, lit_var_list: left.literal_variables.clone)
 	end
 	return TermList.new(left.line, left.col, [left, right])  # Else, create a TermList.
 end
@@ -261,19 +347,102 @@ def add_term_and_term_list(term, term_list)
 
 	term_added = false
 	new_terms = term_list.terms.map { |tl_term|
-		if (not term_added) and tl_term.literal_variables == term.literal_variables and tl_term.imaginary == term.imaginary
+		if (not term_added) and tl_term.same_literal_variables? term and tl_term.imaginary == term.imaginary
 			term_added = true
-			puts ">> term added to a term in term list."
 			Term.new(term.line, term.col, magnitude: tl_term.magnitude + term.magnitude, imaginary: term.imaginary, lit_var_list: term.literal_variables)
 		else
 			tl_term
 		end
 	}
+
 	if not term_added
 		new_terms.append(term)
 	end
 
 	return TermList.new(term.line, term.col, new_terms)	
+end
+
+
+# add_term_list_and_term_list
+#
+# Adds two TermLists together.
+def add_term_list_and_term_list(tl_left, tl_right)
+
+	tl_left.terms.each {|term|
+		tl_right = add_term_and_term_list(term, tl_right)
+	}	
+	return tl_right
+end
+
+
+# add_unknown_terms_or_term_lists
+#
+# Checks if the arguments are Terms or TermLists and adds them using the appropriate function.
+def add_unknown_terms_or_term_lists(left, right)
+	case [left, right]
+	in Term, Term
+		return add_two_terms(left, right)
+	in TermList, Term
+		return add_term_and_term_list(right, left)
+	in Term, TermList
+		return add_term_and_term_list(left, right)
+	in TermList, TermList
+		return add_term_list_and_term_list(left, right)
+	else
+		throw_error("When multiplying #{left} and #{right} found something that is not a Term or a TermList (#{__LINE__})", left, [])  # TODO: Add stack trace (make a global)
+	end
+end
+
+
+# divide_fraction_by_fraction
+#
+# Returns frac1 / frac2
+def divide_fraction_by_fraction(frac1, frac2)
+	if frac1 == frac2
+		return Term.new(frac1.line, frac1.col, magnitude: 1)
+	elsif frac1.numerator == frac2.numerator
+		return Fraction.new(frac1.line, frac1.col, numerator: frac2.denominator, denominator: frac1.denominator)
+	elsif frac1.denominator == frac2.denominator
+		return Fraction.new(frac1.line, frac1.col, numerator: frac1.numerator, denominator: frac2.numerator)
+	else		
+		return multiply_fraction_and_fraction(frac1, invert_fraction(frac2))
+	end
+end
+
+
+# divide_fraction_by_term_list
+#
+# Returns fraction / term_list
+def divide_fraction_by_term_list(fraction, term_list)
+	tl_fraction = Fraction.new(term_list.line, term_list.col, denominator: term_list)
+	return multiply_fraction_and_fraction(fraction, tl_fraction)
+end
+
+
+# divide_fraction_by_term
+#
+# Returns fraction / term
+def divide_fraction_by_term(fraction, term)
+	term_fraction = Fraction.new(term.line, term.col, denominator: term)
+	return multiply_fraction_and_fraction(fraction, term_fraction)
+end
+
+
+# divide_term_list_by_fraction
+#
+# Returns term_list / fraction (or term_list * fraction^-1)
+def divide_term_list_by_fraction
+	tl_fraction = Fraction.new(term_list.line, term_list.col, numerator: term_list)
+	return multiply_fraction_and_fraction(invert_fraction(fraction), tl_fraction)
+end
+
+
+# divide_term_by_fraction
+#
+# Returns term / fraction (or term * fraction^-1)
+def divide_term_by_fraction(term, fraction)
+	term_fraction = Fraction.new(term.line, term.col, numerator: term)
+	return multiply_fraction_and_fraction(invert_fraction(fraction), term_fraction)
 end
 
 
@@ -285,43 +454,46 @@ def divide_two_terms(left, right)
 
 	# Change the exponent's sign on each literal variable.
 	new_lit_var_list = right.literal_variables.map { |element|  # Form [base variable, exponent]
-		new_lit_var_list.append([element[0], flip_sign_on_term(element[1])])
+		[element[0], flip_sign_on_term(element[1])]
 	}
 	if right.imaginary
 		new_right = Term.new(right.line, right.col, magnitude: -1.0 / right.magnitude, imaginary: true, lit_var_list: new_lit_var_list)
 	else
 		new_right = Term.new(right.line, right.col, magnitude: 1.0 / right.magnitude, lit_var_list: new_lit_var_list)
 	end
-	multiply_two_terms(left, new_right)
+	return multiply_two_terms(left, new_right)
 end
-
-
-##############################################
-##      ######  ######  ####    ######      ##
-##        ##    ##  ##  ##  ##  ##  ##      ##
-##        ##    ##  ##  ##  ##  ##  ##      ##
-##        ##    ##  ##  ##  ##  ##  ##      ##
-##        ##    ######  ####    ######      ##
-##############################################
-#
-#
-# => Add a fraction that wraps Terms and TermLists (would term lists ever need to be fractions? -> no.).
-# => Add multiply term list by term list
-# => Consider adding a 'simplify' method to the termList.
 
 
 # divide_term_by_term_list
 #
-# 
+# Creates a fraction with the term as the numerator and the term_list as the denominator.
+def divide_term_by_term_list(term, term_list)
+	return Fraction.new(term.line, term.col, numerator: term, denominator: term_list)
+end
+
+
+# divide_term_list_by_term
 #
-def divide_term_by_term_list(left, right)
-	raise "Not Implemented"
+# Creates a fraction with the term_list as the numerator and the term as the denominator.
+def divide_term_list_by_term(term_list, term)
+	return Fraction.new(term.line, term.col, numerator: term_list, denominator: term)
 end
 
-def divide_term_list_by_term(left, right)
-	raise "Not Implemented"
+
+# divide_term_list_by_term_list
+#
+# Creates a fraction with the tl_left as the numerator and the tl_right as the denominator.
+def divide_term_list_by_term_list(tl_left, tl_right)
+	return Fraction.new(tl_left.line, tl_left.col, numerator: tl_left, denominator: tl_right)
 end
 
+# invert_fraction
+#
+# Inverts a fraction. Used when dividing by a fraction.
+def invert_fraction fraction
+	return Fraction.new(fraction.line, fraction.col, numerator: fraction.denominator, denominator: fraction.numerator)
+end
 
 # flip_sign_on_term
 #
@@ -335,10 +507,54 @@ end
 #
 # Flips the sign on the magnitude of each Term in a TermList.
 def flip_sign_on_term_list term_list
-	new_terms = term_list.map { |term|
+	new_terms = []
+	term_list.terms.each { |term|
 		new_terms.append(flip_sign_on_term term)
 	}
 	return TermList.new(term_list.line, term_list.col, new_terms)
+end
+
+
+# flip_sign_on_fraction
+#
+# Returns a new fraction with the numerators' sign inverted.
+def flip_sign_on_fraction fraction
+	case fraction.numerator
+	in Term
+		return Fraction.new(fraction.line, fraction.col, numerator: flip_sign_on_term(fraction.numerator), denominator: fraction.denominator)
+	in TermList
+		return Fraction.new(fraction.line, fraction.col, numerator: flip_sign_on_term_list(fraction.numerator), denominator: fraction.denominator)
+	else
+		throw_error("When flipping sign on #{fraction}, found something that is not a Term or a TermList (#{__LINE__})", fraction, [])  # TODO: Add stack trace (make a global)
+	end
+end
+
+
+# multiply_fraction_and_fraction
+#
+# Multiplies two fractions.
+def multiply_fraction_and_fraction(left, right)
+	new_numerator = multiply_unknown_terms_or_term_lists(left.numerator, right.numerator)
+	new_denominator = multiply_unknown_terms_or_term_lists(left.denominator, right.denominator)
+	return Fraction.new(left.line, left.col, numerator: new_numerator, denominator: new_denominator)
+end
+
+
+# multiply_fraction_and_term_list
+#
+#
+def multiply_fraction_and_term_list(fraction, term_list)
+	new_numerator = multiply_unknown_terms_or_term_lists(fraction.numerator, term_list)
+	return Fraction.new(fraction.line, fraction.col, numerator: new_numerator, denominator: new_denominator)
+end
+
+
+# multiply_fraction_and_term
+#
+#
+def multiply_fraction_and_term(fraction, term)
+	new_numerator = multiply_unknown_terms_or_term_lists(fraction.numerator, term)
+	return Fraction.new(fraction.line, fraction.col, numerator: new_numerator, denominator: new_denominator)
 end
 
 
@@ -349,12 +565,16 @@ end
 def multiply_two_terms(left, right)
 
 	# Get new list of the literal varibles (with exponents added together as needed).
-	combined_lit_var_list = left.literal_variables + right.literal_variables
+	combined_lit_var_list = left.literal_variables.clone + right.literal_variables.clone
 	new_lit_var_list = []
+
 	index = 0
 	while combined_lit_var_list[index] != nil
 		if combined_lit_var_list[index + 1] and combined_lit_var_list[index][0] == combined_lit_var_list[index + 1][0]
-			combined_lit_var_list[index + 1][1] = add_two_terms(combined_lit_var_list[index][1], combined_lit_var_list[index + 1][1])
+
+			new_lit_var_list.append([combined_lit_var_list[index][0], add_two_terms(combined_lit_var_list[index][1], combined_lit_var_list[index + 1][1])])
+			index += 1
+			# TODO: I think this would break with more than 2 terms with the same literal_variables. Not sure how that would happen though.
 		else
 			new_lit_var_list.append(combined_lit_var_list[index])
 		end
@@ -379,8 +599,6 @@ end
 # Multiplies the term into each term in the TermList.
 def multiply_term_and_term_list(term, term_list)
 
-	puts "   line: #{__LINE__} -- term: #{term}"
-	puts "   line: #{__LINE__} -- term_list: #{term_list}"
 	new_terms = term_list.terms.map {|tl_term|
 		multiply_two_terms(tl_term, term)
 	}
@@ -389,19 +607,59 @@ end
 
 # multiply_term_list_and_term_list
 #
-# 
+# Multiplies two TermLists together.
 def multiply_term_list_and_term_list(tl_left, tl_right)
-
-	puts "   line: #{__LINE__} -- tl_left:  #{tl_left}"
-	puts "   line: #{__LINE__} -- tl_right: #{tl_right}"
 
 	new_terms = []
 	tl_left.terms.each {|term|
 		new_tl = multiply_term_and_term_list(term, tl_right)
-		puts "       line: #{__LINE__} -- result: #{new_tl}"
 		new_terms += new_tl.terms
 	}
-	return TermList.new(tl_left.line, tl_left.col, new_terms)
+	new_tl = TermList.new(tl_left.line, tl_left.col, new_terms)
+	return combine_redundant_terms_in_term_list(new_tl)
+end
+
+
+# multiply_unknown_terms_or_term_lists
+#
+# Checks if the arguments are Terms or TermLists and multiplies them using the appropriate function.
+def multiply_unknown_terms_or_term_lists(left, right)
+	case [left, right]
+	in Term, Term
+		return multiply_two_terms(left, right)
+	in TermList, Term
+		return multiply_term_and_term_list(right, left)
+	in Term, TermList
+		return multiply_term_and_term_list(left, right)
+	in TermList, TermList
+		return multiply_term_list_and_term_list(left, right)
+	else
+		throw_error("When multiplying #{left} and #{right} found something that is not a Term or a TermList (#{__LINE__})", left, [])  # TODO: Add stack trace (make a global)
+	end
+end
+
+
+# subtract_fraction_from_fraction
+#
+# Returns the answer of: frac2 - frac1
+def subtract_fraction_from_fraction(frac1, frac2)
+	return add_fraction_and_fraction(frac2, flip_sign_on_fraction(frac1))
+end
+
+
+# subtract_fraction_from_term_list
+#
+# Return the answer of: term_list - fraction
+def subtract_fraction_from_term_list(fraction, term_list)
+	return add_fraction_and_term_list(flip_sign_on_fraction(fraction), term_list)
+end
+
+
+# subtract_fraction_from_term
+#
+# Return the answer of: term - fraction
+def subtract_fraction_from_term(fraction, term)
+	return add_fraction_and_term(flip_sign_on_fraction(fraction), term)
 end
 
 
@@ -413,6 +671,15 @@ def subtract_two_terms(left, right)
 	add_two_terms(left, flip_sign_on_term(right))
 end
 
+
+# subtract_term_from_fraction
+#
+# Return the answer of: fraction - term
+def subtract_term_from_fraction
+	return add_fraction_and_term(fraction, flip_sign_on_fraction(term))
+end
+
+
 # subtract_term_from_term_list
 #
 # For cases where [a + b + c] - d. Flips the sign on the term, and then adds to Term to the TermList.
@@ -420,11 +687,28 @@ def subtract_term_from_term_list(term, term_list)
 	add_term_and_term_list(flip_sign_on_term(term), term_list)
 end
 
+
+# subtract_term_list_from_fraction
+#
+# Return the answer of: fraction - term_list
+def subtract_term_list_from_fraction
+	return add_fraction_and_term_list(fraction, flip_sign_on_fraction(term_list))
+end
+
+
 # subtract_term_list_from_term
 #
 # For cases where a - [b + c + d]. Flips the sign on the TermList, and then the Term and the TermList.
 def subtract_term_list_from_term(term_list, term)
 	add_term_and_term_list(term, flip_sign_on_term_list(term_list))
+end
+
+
+# subtract_term_list_from_term_list
+#
+# For cases where tl_right - tl_left. Flips the sign on the TermList, and then the Term and the TermList.
+def subtract_term_list_from_term_list(tl_left, tl_right)
+	add_term_and_term_list(flip_sign_on_term_list(tl_left), tl_right)
 end
 
 
@@ -435,6 +719,55 @@ end
 ##############################################################
 #                   Other Helper Functions                   #
 ##############################################################
+
+
+# combine_redundant_terms_in_term_list
+#
+# Merges any terms with the same imaginary and literal_variables values
+def combine_redundant_terms_in_term_list term_list
+
+	terms_to_combine = []
+	term_list.terms.each{ |term|
+		found_terms = term_list.terms.select{ |x| term.same_literal_variables? x}
+		terms_to_combine.append(found_terms)
+	}
+
+	terms_to_combine = terms_to_combine.uniq # Remove duplicate elements of the array
+
+	new_terms = []
+	terms_to_combine.each {|array_of_terms|
+		# Reduce similar terms to a single term.
+		new_term = array_of_terms.reduce(Term.new(array_of_terms[0].line, array_of_terms[0].col, magnitude: 0)){ |sum_term, term|
+			case sum_term
+			in Term
+				add_two_terms(term, sum_term)
+			in TermList
+				add_term_and_term_list(term, sum_term)
+			else
+				throw_error("When reducing a TermList, found a value that is not Term or TermList", term_list, [])  # TODO: Add stack trace (make a global)
+			end
+		}
+		new_terms.append(new_term)
+	}
+
+	# Reduce new_terms to a single TermList
+	new_term_list = new_terms.reduce(Term.new(term_list.line, term_list.col, magnitude: 0)){ |sum_term, term|
+		case [sum_term, term]
+		in Term, Term
+			add_two_terms(term, sum_term)
+		in TermList, Term
+			add_term_and_term_list(term, sum_term)
+		in Term, TermList
+			add_term_and_term_list(sum_term, term)
+		in TermList, TermList
+			add_term_list_and_term_list(sum_term, term)
+		else
+			throw_error("When reducing a TermList, found a value that is not Term or TermList", term_list, stack_trace)
+		end
+	}
+	return new_term_list
+end
+
 
 # StackTraceElement
 #

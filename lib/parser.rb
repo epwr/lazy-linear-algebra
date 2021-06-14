@@ -23,13 +23,13 @@ class Parser
 		program = []
 		while @tokens.peak and @tokens.peak.type != "EOF" # Not EOF
 			begin
-				#program.append(parse_next)  # TODO: Revert comment (remove next 4 lines)
-				next_ast = parse_next
-				puts "#{next_ast}"
-				puts ""
-				program.append(next_ast)
+				program.append(parse_next)  # TODO: Revert comment (remove next 4 lines)
+				#next_ast = parse_next
+				#puts "#{next_ast}"
+				#puts ""
+				#program.append(next_ast)
 			rescue => e
-				puts "..................."
+				puts "........PARSER ERROR......."
 				puts e.message
 				puts e.backtrace
 				puts "..................."
@@ -133,9 +133,16 @@ class Parser
 			left_ast = cur_tok
 		end
 
-		if @tokens.peak.value == "-"
+		if @tokens.peak.value == "-" # Turn (left - right) into (left + (- right))
 			op = Operator.new(@tokens.peak.line, @tokens.peak.col, "+")
+			minus = @tokens.next  # Must eat the '-' operator before parse_next (but save for later)
 			right_ast = parse_next
+			right_ast = UnaryOperation.new(right_ast.line, right_ast.col, minus, right_ast)
+		#elsif @tokens.peak.value == "*" # Turn (left / right) into (left * (1 / right)) -- helps enforce order of operations
+		#	op = Operator.new(@tokens.peak.line, @tokens.peak.col, "+")
+		#	minus = @tokens.next  # Must eat the '-' operator before parse_next (but save for later)
+		#	right_ast = parse_next
+		#	right_ast = UnaryOperation.new(right_ast.line, right_ast.col, minus, right_ast)
 		else	
 			op = parse_single_token @tokens.next
 			right_ast = parse_next

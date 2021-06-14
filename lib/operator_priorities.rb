@@ -15,6 +15,7 @@ def get_operator_priority operator
 		"*." => 	30,  	# Dot Product
 		"*+" => 	30,  	# Cross Product
 		"*!" => 	30,  	# Tensor Product
+		"/" => 		21,  	# Division
 		"*" => 		20,  	# Product
 		"+" => 		10, 	# Addition
 		"-" => 		10, 	# Subtraction

@@ -8,7 +8,7 @@ require_relative "./interpreter.rb"
 
 
 def test_lexer 
-	lxr = TokenStream.new 'test_files/garbage.pl'
+	lxr = TokenStream.new 'manual_test_files/garbage.pl'
 	
 	token = lxr.next
 	puts "Token: #{token}"
@@ -20,14 +20,14 @@ end
 
 def test_parser
 
-	parser = Parser.new TokenStream.new 'test_files/small_test.pl'
+	parser = Parser.new TokenStream.new 'manual_test_files/small_test.pl'
 	parser.run
 
 end
 
 def test_interpreter
 
-	parser = Parser.new TokenStream.new 'test_files/small_test.pl'
+	parser = Parser.new TokenStream.new 'manual_test_files/small_test.pl'
 	program = parser.run
 	eval_program(program)
 

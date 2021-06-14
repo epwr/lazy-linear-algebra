@@ -20,6 +20,7 @@ class Token
 	def to_s
 		"(#{@type} : '#{@value}')"
 	end
+	
 end
 
 

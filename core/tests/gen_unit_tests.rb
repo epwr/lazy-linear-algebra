@@ -91,7 +91,7 @@ end
 
 # create_unit_test_per_function
 #
-#
+# For every function, create 3 unit tests.
 def create_unit_test_per_function
 	
 	for line in $config["ifp"]
@@ -116,7 +116,7 @@ end
 
 # parse_class_methods
 #
-#
+# For every method in a class, create 3 unit tests.
 def parse_class_methods(class_name)
 
 	$config["ofp"].write( "\n\t# Testing Class: #{class_name}\n" )
@@ -145,7 +145,7 @@ end
 
 # print_output_file_footer
 #
-#
+# Write the test function, and the code to run everything, to the output file.
 def print_output_file_footer
 	$config["ofp"].write( "\nend\n\n" )
 	$config["ofp"].write( "######################################################\n#                  TESTING FUNCTION                  #\n######################################################\n\n" )
@@ -167,5 +167,6 @@ def print_help
 	puts "	-f		: Forces the program to overwrite the output file (does not check if it exists)."
 end
 
-# The last line.
-run
+# Set up as a modulino
+if __name__ == '__main__':
+	run

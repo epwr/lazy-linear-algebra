@@ -5,6 +5,10 @@
 # Description:
 #    Defines the Abstract Syntax Tree for LAL. 
 
+
+# UnitNode
+#
+# Default node.
 class UnitNode
 	def initialize (line, col)
 		@type = "UnitNode"
@@ -15,8 +19,10 @@ class UnitNode
 	attr_reader :type, :line, :col
 end
 
+
 # Program
-#    Holds a list of expressions to evaluate.
+#
+# Holds a list of nodes to evaluate.
 class Program < UnitNode
 	def initialize (line, col, ast_list)
 		super(line, col)
@@ -30,6 +36,10 @@ class Program < UnitNode
 	end 
 end
 
+
+# Assignment
+#
+# Holds an identifer on the left, and a node to evaluate on the right.
 class Assignment < UnitNode
 	def initialize (line, col, left, right)
 		super(line, col)
@@ -43,6 +53,7 @@ class Assignment < UnitNode
 		"<Assignment : #{@left} = #{@right}>"
 	end
 end
+
 
 # UnaryOperation
 #
@@ -61,6 +72,10 @@ class UnaryOperation < UnitNode
 	end
 end
 
+
+# Operation
+#
+# A binary operation.
 class Operation < UnitNode
 	def initialize (line, col, left, operator, right)
 		super(line, col)
@@ -77,6 +92,11 @@ class Operation < UnitNode
 	end
 end
 
+
+# Operator
+#
+# Held by both UnaryOperation and Operation, to be checked by the interpreter
+# to decide which operation to perform.
 class Operator < UnitNode
 	def initialize (line, col, value)
 		super(line, col)
@@ -112,10 +132,19 @@ class TermList < UnitNode
 		@terms.length >= 1 ? str = str[0..-4]: ""
 		return str + ">"
 	end
+	
+	def to_terminal_str
+		str = ""
+		@terms.each {|t| str += t.to_terminal_str + " + "}
+		str = str[0..-4]
+		if @terms.length > 1 
+			str = "(" + str + ")"
+		end
+		return str
+	end
+
 
 	def == other
-
-
 		if other.type == "Term" and @terms.length == 0 and other.magnitude == 0
 			return true
 		elsif other.type == "Term" and @terms.length == 1 and @terms[0] == other
@@ -181,6 +210,26 @@ class Term < UnitNode
 		end
 	end
 
+	def to_terminal_str
+		if @magnitude == 0
+			return "0"
+		elsif @magnitude == 1 and (not @imaginary) and @literal_variables == []
+			return "1"
+		else
+			lit_var_str = ""
+			if @literal_variables != []
+				@literal_variables.each {|e|
+					exponent = e[1].to_terminal_str
+					if exponent.length > 1
+						exponent = "(" + exponent + ")"
+					end
+					lit_var_str += "#{e[0]}^#{exponent}"
+				}	
+			end
+			return "#{@magnitude == 1 ? "" : @magnitude}#{@imaginary ? "i" : ""}#{lit_var_str}"
+		end
+	end
+
 	def same_literal_variables? other
 		if @literal_variables.length != other.literal_variables.length
 			return false
@@ -195,7 +244,9 @@ class Term < UnitNode
 	end
 
 	def == other
-		if other.type == "TermList"
+		if other == nil
+			return false
+		elsif other.type == "TermList"
 			return other == self
 		elsif @type != other.type or @magnitude != other.magnitude or @imaginary != other.imaginary or @literal_variables.length != other.literal_variables.length
 			return false
@@ -232,6 +283,7 @@ class Term < UnitNode
 	end
 end
 
+
 # Fraction
 #
 # A simple fraction object. Can hold a Term or a TermList in either the
@@ -256,6 +308,10 @@ class Fraction < UnitNode
 		"<Fraction : #{@numerator} / #{@denominator}>"
 	end
 
+	def to_terminal_str
+		return "#{@numerator.to_terminal_str} / #{@denominator.to_terminal_str}>"
+	end
+
 	def == other
 		if other.type != "Fraction"
 			return false
@@ -264,40 +320,9 @@ class Fraction < UnitNode
 	end
 end
 
-class Lambda < UnitNode
-	def initialize (line, col, args, body)
-		super(line, col)
-		@type = 'Function'
-		@args = args
-		@body = body
-		@env  = {}
-	end
-	attr_reader :args, :body, :env
-	attr_writer :env
-
-	def to_s
-		str = "<Lambda : Arg = ("
-		if @args
-			@args.each {|x| str += " #{x}"}
-		end
-		str += " ), Body = ( #{@body} )>"
-		str
-	end
-end
-
-class Call < UnitNode
-	def initialize (line, col, fnc_name, args)
-		super(line, col)
-		@type = 'Call'
-		@name = fnc_name
-		@args = args
-	end
-
-	def to_s
-		"<Call : #{@name} with: #{@args}>"
-	end
-end
-
+# IfThenElse
+#
+# An If statement. Only if_true or if_false will be evaluated (each is only one non-Program node).
 class IfThenElse < UnitNode
 	def initialize (line, col, condition, true_exp, false_exp=nil)
 		super(line, col)
@@ -313,6 +338,9 @@ class IfThenElse < UnitNode
 	end
 end
 
+# Boolean
+#
+# A boolean node. Is as expected.
 class Boolean < UnitNode
 	def initialize (line, col, value)
 		super(line, col)
@@ -329,6 +357,9 @@ class Boolean < UnitNode
 	end
 end
 
+# Reference
+#
+# Looks up a name in the current environment.
 class Reference < UnitNode
 	def initialize (line, col, name)
 		super(line, col)
@@ -342,6 +373,9 @@ class Reference < UnitNode
 	end
 end
 
+# Tuple
+#
+# A tuple of multiple different nodes (can hold different types of nodes).
 class Tuple < UnitNode
 	def initialize (line, col, values)
 		super(line, col)
@@ -355,6 +389,9 @@ class Tuple < UnitNode
 	end
 end
 
+# Matrix
+#
+# A 2d array of Terms, TermLists, and Fractions. Must be rectangular.
 class Matrix < UnitNode
 	def initialize (line, col, values)
 		super(line, col)
@@ -387,6 +424,10 @@ class Matrix < UnitNode
 	end
 end
 
+# ReturnStatement
+#
+# Allows the interpreter to interupt a Program's flow, and return the evaluated node (value holds
+# a node to be evaluated).
 class ReturnStatement < UnitNode
 	def initialize (line, col, value)
 		super(line, col)
@@ -399,18 +440,79 @@ class ReturnStatement < UnitNode
 	end
 end
 
-class SetOperatorInfo < UnitNode
-	def initialize (line, col, operator, type1, type2, priority, function)
+
+# Lambda
+#
+# Creates a Closure when evaluated.
+class Lambda < UnitNode
+	def initialize (line, col, args, body)
 		super(line, col)
-		@type = 'SetOperatorInfo'
-		@operator = operator
-		@type1 = type1
-		@type2 = type2
-		@priority = priority
-		@function = function
+		@type = 'Function'
+		@args = args
+		@body = body
+		@env  = {}
+	end
+	attr_reader :args, :body, :env
+	attr_writer :env
+
+	def to_s
+		str = "<Lambda : Arg = ("
+		if @args
+			@args.each {|x| str += " #{x}"}
+		end
+		str += " ), Body = ( #{@body} )>"
+		str
+	end
+end
+
+
+# Closure
+#
+# Created by evaluating a lambda. Stores an environment and a Program (as body)
+class Closure < UnitNode
+	def initialize (line, col, arg_ids, env, body)
+		super(line, col)
+		@type = 'Closure'
+		@arg_ids = arg_ids  # Allows the passed parameters to be associated with particular names in the environment.
+		@env = env
+		@body = body
+	end
+	attr_reader :env, :arg_ids, :body
+
+	def to_s
+		"<Closure : #{@arg_ids}>"
+	end
+end
+
+# BuiltInClosure
+#
+# Not Implemented. Allows functions implemented by the interpreter.
+class BuiltInClosure < UnitNode
+	def initialize (line, col, value)
+		super(line, col)
+		@type = 'Closure'
+		@value = value
 	end
 
 	def to_s
-		"<SetOperatorInfo : (#{@type1.type}) #{@operator.value} (#{@type2.type}) as (priority: #{priority.value}, function: #{@function.name}) >"
+		"<Closure : #{value}>"
+	end
+end
+
+# Call
+#
+# When evaluated, looks up fnc_name in the environment. Expects to find a closure, and
+# calls the closure with the given args.
+class Call < UnitNode
+	def initialize (line, col, fnc_name, args)
+		super(line, col)
+		@type = 'Call'
+		@fnc_name = fnc_name
+		@args = args
+	end
+	attr_reader :fnc_name, :args
+
+	def to_s
+		"<Call : #{@name} with: #{@args}>"
 	end
 end

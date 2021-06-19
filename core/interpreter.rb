@@ -5,24 +5,21 @@
 # Description:
 # 		Takes a program (list of AST), typically created by the parser, and evaluates it.
 
+# IMPORTS
 require_relative "./ast.rb"
 
-##############################################
-##      ######  ######  ####    ######      ##
-##        ##    ##  ##  ##  ##  ##  ##      ##
-##        ##    ##  ##  ##  ##  ##  ##      ##
-##        ##    ##  ##  ##  ##  ##  ##      ##
-##        ##    ######  ####    ######      ##
-##############################################
+# eval_program
 #
-# => Add Matrix stuff (see pg. 139 of main notebook)
-# => Add Calls and Lambdas
-# 		- add determinant of a matrix as a built in function
-
-
+# Evaluates an entire program (prints any runtime errors) under an empty environment
+# and returns the final value and environment.
 def eval_program(program)
-	value, env = eval_program_under(program, {}, [])
-	return value
+	begin
+		value, env = eval_program_under(program, {}, [])
+	rescue => e
+		puts e.message
+		value, env = nil, nil
+	end
+	return value, env
 end
 
 private
@@ -31,34 +28,27 @@ private
 #                       Generic Evals                        #
 ##############################################################
 
-def eval_program_under(program, env, stack_trace)
 
+# eval_program_under
+#
+# Evaluates a program under a specific environement.
+def eval_program_under(program, env, stack_trace)
 	value = nil
 	program.each {|node| 
-		# TODO: Add in dealing with a return statement.
-		# TODO: Only allow parsing an Assignment from a program level (which covers function bodies)
-		# => Would REQUIRE having Programs as true_exp and false_exp in ifThenElses.
-		# => Would mean I don't need to pass the env back down the stack ever.
 		value, env = eval_node_under(node, env, stack_trace)
-		# TODO: Remove debug stuff (below)
-		puts "----"
-		puts "Value: #{value}"
-		#env_str = "Environment: \n"
-		#env.each{ |key, value|
-		#	env_str += "\t#{key}  =   #{value}\n"
-		#}
-		#puts env_str
-		puts "---------------------------------------------------------"
 	}
-	
 	return value, env
 end
 
+
+# eval_node_under
+#
+# Evaluates an AST node under a specific environment.
 def eval_node_under(node, env, stack_trace)
-	
+
 	case node
 	in Program
-		eval_program_under(node, env, stack_trace + [StackTraceElement.new(node.line, node.col)])
+		eval_program_under(node, env, stack_trace)
 	in Term
 		return node, env
 	in TermList
@@ -75,17 +65,17 @@ def eval_node_under(node, env, stack_trace)
 			return env[node.name], env
 		else
 			throw_error("'#{node.name}' is not defined.", node, stack_trace)
+			return nil, env
 		end
 	in Matrix
-		return node, env
+		return eval_matrix(node, env, stack_trace)
 	in Operator
 		puts "Found Operator -> Not Implemented."
 		# TODO: Implement -- Maybe this is an error?
 	in UnaryOperation
 		return eval_unary_operation(node, env, stack_trace)
 	in Lambda
-		node.env = env.clone  # Lexical Scope
-		return node, env
+		return eval_lambda(node, env, stack_trace)
 	in Call
 		return eval_call(node, env, stack_trace)
 	in IfThenElse
@@ -101,15 +91,23 @@ def eval_node_under(node, env, stack_trace)
 	end
 end
 
-##############################################################
+############s##################################################
 #                    Specific Node Evals                     #
 ##############################################################
 
+
+# eval_operation
+# 
+# Evaluates an Operation.	
 def eval_operation(node, env, stack_trace)
 
 	# Evaluate both sides of operation (discard returned environment)
 	left, _ = eval_node_under(node.left, env, stack_trace)
 	right, _ = eval_node_under(node.right, env, stack_trace)
+
+	if left == nil or right == nil
+		return nil, env
+	end
 
 	# TODO: Add more operations.
 	case node.operator.value
@@ -219,6 +217,7 @@ def eval_operation(node, env, stack_trace)
 			return tensor_product_of_two_matrices(left, right), env
 		else
 			throw_error("Operator '#{node.operator.value}' not implemented for left: #{left.type}, right: #{right.type}.", node, stack_trace) 
+			return nil, env
 		end
 	else
 		throw_error("Operator '#{node.operator.value}' not implemented.", node, stack_trace) 
@@ -226,6 +225,9 @@ def eval_operation(node, env, stack_trace)
 end
 
 
+# eval_unary_operation
+# 
+# Evaluates a UnaryOperation.	
 def eval_unary_operation(node, env, stack_trace)
 
 	case node.operator.value
@@ -234,10 +236,9 @@ def eval_unary_operation(node, env, stack_trace)
 		case value
 		in Boolean
 			return Boolean.new(value.line, value.col, !value.value), env
-		in Matrix
-			return invert_matrix(value)
 		else
 			throw_error("UnaryOperator '#{node.operator.value}' not implemented for: #{value.type}.", node, stack_trace) 
+			return nil, env
 		end
 	when "-"
 		value, _ = eval_node_under(node.right, env, stack_trace)
@@ -252,6 +253,7 @@ def eval_unary_operation(node, env, stack_trace)
 			return multiply_matrix_and_term(value, Term.new(-1,-1, magnitude: -1))
 		else
 			throw_error("UnaryOperator '#{node.operator.value}' not implemented for: #{value.type}.", node, stack_trace) 
+			return nil, env
 		end
 	when "~"
 		value, _ = eval_node_under(node.right, env, stack_trace)
@@ -260,6 +262,7 @@ def eval_unary_operation(node, env, stack_trace)
 			return transpose_of_matrix(value), env
 		else
 			throw_error("UnaryOperator '#{node.operator.value}' not implemented for: #{value.type}.", node, stack_trace) 
+			return nil, env
 		end
 	else
 		throw_error("UnaryOperator '#{node.operator.value}' is not implemented.", node, stack_trace)
@@ -268,6 +271,10 @@ def eval_unary_operation(node, env, stack_trace)
 end
 
 
+# eval_if_then_else
+#
+# Evaluates an IfThenElse. Only evalutes one of the if_true and if_false fields (based
+# on the evaluated value of the condition field).
 def eval_if_then_else(node, env, stack_trace)
 
 	condition = eval_node_under(node.condition, env, stack_trace)
@@ -287,16 +294,50 @@ def eval_if_then_else(node, env, stack_trace)
 	end
 end
 
-
+# eval_call
+#
+# Calls a function. Throws and error if the identifier is not dereferenced as a Closure (in the
+# current environment).
 def eval_call(node, env, stack_trace)
 
-	puts "Found Call -> eval_call is Not Implemented."
-	# TODO: Implement
-	# => Create a new stack trace
-	# => lookup lambda
-	# => Eval args (use current env)
-	# => Call eval_program_under (with lambda's environment extended with args)
+	case env[node.fnc_name]
+	in Closure
+		strace = stack_trace.clone
+		strace.append(StackTraceElement.new(node.line, node.col, node.fnc_name, node.args))
+		new_env = env[node.fnc_name].env.clone  # Clone the environment saved in the closure
+		if node.args and env[node.fnc_name].arg_ids and node.args.length != env[node.fnc_name].arg_ids.length
+			throw_error("Calling '#{node.fnc_name}', expected #{env[node.fnc_name].arg_ids.max_term_length} arguments and got #{node.args}.", node, stack_trace)
+			return nil, env
+		end
+		if node.args
+			env[node.fnc_name].arg_ids.each_with_index{ |arg, index|  # Eval arg and assign to arg_id in new_env.
+				new_env[arg.name], _ = eval_node_under(node.args[index], env, stack_trace)
+			}
+		end
+	else
+		throw_error("Calling '#{node.fnc_name}', which does not seem to be a function.", node, stack_trace)
+	end
 
+end
+
+
+# eval_matrix
+#
+# Evaluates a matrix.
+def eval_matrix(node, env, stack_trace)
+		
+		result_rows = []
+		node.values.each{|row| 
+			result_row = []
+			row.map{|elem| 
+				value, _ = eval_node_under(elem, env, stack_trace)
+				# TODO: Check return value acceptable.
+				result_row.append(value)
+			}
+			result_rows.append(result_row)
+		}
+		m = Matrix.new(node.line, node.col, result_rows)
+		return m, env
 end
 
 
@@ -319,6 +360,14 @@ def eval_tuple(node, env, stack_trace)
 end
 
 
+# eval_lambda
+#
+# Returns a (lexical scope) closure 
+def eval_lambda(node, env, stack_trace)
+	return Closure.new(node.line, node.col, node.args, env.clone, node.body), env		
+end
+
+
 ##############################################################
 #        Operations on Fractions, Terms, and TermList        #
 ##############################################################
@@ -328,11 +377,6 @@ end
 #
 #
 def add_fraction_and_fraction(frac1, frac2)
-	
-	puts "i l: #{__LINE__} > add_fraction_and_fraction"
-	puts "i l: #{__LINE__} > frac1: #{frac1}"
-	puts "i l: #{__LINE__} > frac2: #{frac1}"
-
 	if frac1.denominator != frac2.denominator
 		new_frac1_numerator = multiply_unknown_terms_or_term_lists(frac1.numerator, frac2.denominator)
 		new_frac2_numerator = multiply_unknown_terms_or_term_lists(frac2.numerator, frac1.denominator)
@@ -580,7 +624,7 @@ end
 
 # multiply_fraction_and_term_list
 #
-#
+# Multiples a fraction into every element of a TermList
 def multiply_fraction_and_term_list(fraction, term_list)
 	new_numerator = multiply_unknown_terms_or_term_lists(fraction.numerator, term_list)
 	return Fraction.new(fraction.line, fraction.col, numerator: new_numerator, denominator: new_denominator)
@@ -589,7 +633,7 @@ end
 
 # multiply_fraction_and_term
 #
-#
+# Multiplies a fraction and a term.
 def multiply_fraction_and_term(fraction, term)
 	new_numerator = multiply_unknown_terms_or_term_lists(fraction.numerator, term)
 	return Fraction.new(fraction.line, fraction.col, numerator: new_numerator, denominator: new_denominator)
@@ -756,7 +800,7 @@ end
 
 # add_two_matrices
 #
-#
+# Adds two matrices.	
 def add_two_matrices(left, right)
 	
 	if left.rows != right.rows or left.cols != right.cols
@@ -798,7 +842,7 @@ end
 
 # subtract_matrix_minus_matrix
 #
-#
+# Subtracts two matrices.
 def subtract_matrix_minus_matrix
 	raise "Not Implemented"  # TODO: I think I can remove this. because a + b => a + (-b)
 end
@@ -871,22 +915,12 @@ def multiply_two_matrices(left, right)
 					throw_error("Matrix addition with matrices that don't contain only Terms, TermLists, and Fractions.", left, [])  # TODO: Add stack trace (make a global)
 				end
 			end
-			puts "i l: #{__LINE__} > found: #{new_elem}"
-			puts ""
 			new_row.append(new_elem)
 		end
 		new_rows.append(new_row)
 	end
 	return Matrix.new(left.line, left.col, new_rows)
 
-end
-
-
-# invert_matrix
-#
-#
-def invert_matrix
-	raise "Not Implemented"
 end
 
 
@@ -909,6 +943,7 @@ def tensor_product_of_two_matrices(mat1, mat2)
 			
 			result_row = []
 			mat1_row.each { |mat1_elem|
+
 				mat2_row.each { |mat2_elem|
 					case [mat1_elem, mat2_elem]
 					in [Term, Term]
@@ -930,7 +965,7 @@ def tensor_product_of_two_matrices(mat1, mat2)
 					in [Fraction, Fraction]
 						product = multiply_fraction_and_fraction(mat1_elem, mat2_elem)
 					else
-						throw_error("Matrix addition with matrices that don't contain only Terms, TermLists, and Fractions.", left, [])  # TODO: Add stack trace (make a global)
+						throw_error("Matrix tensor products with matrices that don't contain only Terms, TermLists, and Fractions.", mat1, [])  # TODO: Add stack trace (make a global)
 					end
 
 					result_row.append(product)
@@ -945,28 +980,85 @@ end
 
 # multiply_matrix_and_term
 #
-#
+# Multiplies a scalar into every term in a matrix.
 def multiply_matrix_and_term(matrix, term)
-	raise "Not Implemented: multiply_matrix_and_term()"
+
+	result_rows = []
+	matrix.values.each { |row|
+		result_row = []
+		row.each { |elem|
+
+			case elem
+			in Term
+				product = multiply_two_terms(term, elem)
+			in TermList
+				product = multiply_term_and_term_list(term, elem)
+			in Fraction
+				product = multiply_fraction_and_term(elem, term)
+			else
+				throw_error("Matrix does not contain only Terms, TermLists, and Fractions.", matrix, [])  # TODO: Add stack trace (make a global)
+			end
+			result_row.append(product)
+		}
+		result_rows.append(result_row)
+	}
+	return Matrix.new(matrix.line, matrix.col, result_rows)
 end
 
 
 # multiply_matrix_and_term_list
 #
-#
+# Multiplies a TermList into every element of a matrix.
 def multiply_matrix_and_term_list(matrix, term_list)
-	raise "Not Implemented: multiply_matrix_and_term_list()"
+	
+	result_rows = []
+	matrix.values.each { |row|
+		result_row = []
+		row.each { |elem|
+
+			case elem
+			in Term
+				product = multiply_term_and_term_list(elem, term_list)
+			in TermList
+				product = multiply_term_list_and_term_list(term_list, elem)
+			in Fraction
+				product = multiply_fraction_and_term_list(elem, term_list)
+			else
+				throw_error("Matrix does not contain only Terms, TermLists, and Fractions.", matrix, [])  # TODO: Add stack trace (make a global)
+			end
+			result_row.append(product)
+		}
+		result_rows.append(result_row)
+	}
+	return Matrix.new(matrix.line, matrix.col, result_rows)
 end
 
 # multiply_matrix_and_fraction
 #
-#
+# Multiplies a Fraction into every element of a matrix.
 def multiply_matrix_and_fraction(matrix, fraction)
-	raise "Not Implemented: multiply_matrix_and_fraction()"
+	
+	result_rows = []
+	matrix.values.each { |row|
+		result_row = []
+		row.each { |elem|
+
+			case elem
+			in Term
+				product = multiply_fraction_and_term(fraction, elem)
+			in TermList
+				product = multiply_fraction_and_term_list(fraction, elem)
+			in Fraction
+				product = multiply_fraction_and_fraction(fraction, elem)
+			else
+				throw_error("Matrix does not contain only Terms, TermLists, and Fractions.", matrix, [])  # TODO: Add stack trace (make a global)
+			end
+			result_row.append(product)
+		}
+		result_rows.append(result_row)
+	}
+	return Matrix.new(matrix.line, matrix.col, result_rows)
 end
-
-
-
 
 
 ##############################################################
@@ -1026,12 +1118,12 @@ end
 #
 # Used to track where in the program an error was caused.
 class StackTraceElement
-	def initialize(line, col, fnc_name, *args)
-		@line, @col, @fnc_name, @args = line, col, fnc_name, *args
+	def initialize(line, col, fnc_name, args)
+		@line, @col, @fnc_name, @args = line, col, fnc_name, args
 	end
 
 	def to_s
-		"line: #{@line}, col: #{col}), with args: (#{@args})"
+		"line: #{@line}, col: #{@col}), function: #{@fnc_name} with args: #{@args}"
 	end
 end
 
@@ -1040,19 +1132,54 @@ end
 #
 # Throws runtime errors by printing them along with the stack_trace. Does not
 # allow catching/throwing errors by the user.
-#
-# TODO: Consider implementing a throw/catch system.
 def throw_error(msg, cur_ast_node, stack_trace) 
-
-	puts "Error: #{msg}"
-	puts ""
-	puts "Occured with: #{cur_ast_node}"
-	puts ""
-	puts "At:"
-	stack_trace.each_with_index { |element, index|
-		puts " " * index + element.to_s
-	}
+	err_str = "Runtime Error: #{msg}"
+	if stack_trace != []
+		err_str += " -- In:\n"
+		stack_trace.each_with_index { |element, index|
+			err_str += " " * index + element.to_s + "\n"
+		}
+	end
+	raise err_str
 end
 
+# print_on_terminal
+#
+# Prints a node onto the terminal in a human readable form. Useful for the REPL.
+def print_on_terminal node
 
+	case node
+	in Term
+		puts node.to_terminal_str
+	in TermList
+		puts node.to_terminal_str
+	in Fraction
+		puts node.to_terminal_str
+	in Matrix
+		max_term_length = 0
+		rows_as_strs = []
+		node.values.each { |row| 
+			row_as_str = []
+			row.each { |elem|
+				elem_str = elem.to_terminal_str
+				elem_str.length > max_term_length ? max_term_length = elem_str.length : ''
+				row_as_str.append(elem_str)
+			}
+			rows_as_strs.append(row_as_str)
+		}
+		rows_as_strs.each{ |row|
+			print "|  "
+			row.each {|elem|
+				print "%#{max_term_length}s  " % elem
+			}
+			puts "  |"
+		}
+	else
+		if node and node.type != "UnitNode"  # silent on UnitNode or nil (nil usually means caught error)
+			puts "The following node is not covered by print_on_terminal:"
+			puts node
+		end
+	end
+
+end
 

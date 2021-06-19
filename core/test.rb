@@ -36,5 +36,12 @@ end
 # RUN TESTS
 
 #test_parser
-test_interpreter
 
+parser = Parser.new InteractiveTokenStream.new
+env = {}
+stack_trace = []
+while true
+	node = parser.parse_next
+	value, env = eval_program_under([node], env, stack_trace)
+	print_on_terminal(value)
+end

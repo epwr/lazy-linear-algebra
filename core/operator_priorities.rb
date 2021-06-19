@@ -7,6 +7,10 @@
 #    which accepts an Operator (AST Node) and returns its priority (which is set in this file).
 
 
+# get_operator_priority
+#
+# Called by the parser to determine which operations have a higher priority.
+# Placed in its own file to simplify managing it.
 def get_operator_priority operator
 
 	op_priorities = {

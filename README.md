@@ -40,9 +40,9 @@ When I wrote LLA, I knew that some functionality was not a priority. For example
 We can easily assign a matrix to an identifier. For example, let's create the 4 by 4 identity matrix and assign it to `I_4`:
 
 	I_4 = [ 1, 0, 0, 0
-			0, 0, 0, 0
-			0, 0, 0, 0 
-			0, 0, 0, 0
+		0, 0, 0, 0
+		0, 0, 0, 0 
+		0, 0, 0, 0
 	]
 
 It's worth noting that matrices are the only time where the newline matters: anywhere else newlines are ignored. Looking back, I probably wouldn't do it this way again - incosistency isn't great. But I really like how the syntax for creating matrices looks, and I wanted to be able to have multi line expressions without requiring semi-colons after everything.
@@ -60,19 +60,17 @@ Let's see how we can use LLA to do some quantum calculations. If you aren't fami
 
 First, let's define matrices for _ket zero_ (a state), the CNOT gate, and the Hadamard gate:
 
-	k0 = [ 1, 
-		   0 
-	]
+	k0 = [ 	1, 
+		0 ]
 
 	CNOT = [ 1, 0, 0, 0
-			 0, 1, 0, 0
-			 0, 0, 0, 1 
-			 0, 0, 1, 0
+		 0, 1, 0, 0
+		 0, 0, 0, 1 
+		 0, 0, 1, 0
 	]
 
 	H = (1 / `sqrt-2) * [ 1,  1 
-					      1, -1 
-					    ]
+			      1, -1 ]
 
 _NOTE:_ Because I am lazy, I haven't implemented a square-root function (or any exponential stuff - we didn't do anything in our quantum computing class that needed this). So, instead, I just use a literal variable to represent the square root of 2. We'll see that this works quite well.
 

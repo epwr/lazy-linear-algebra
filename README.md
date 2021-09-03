@@ -5,7 +5,7 @@ _Lazy Linear Algebra_ (LLA) is a custom programming language, implemented from s
 - It provides some visually appealing syntax for linear algebra.
 - It provides a REPL (which can import a file).
 - It handles both real and imaginary numbers.
-- It allows for 'literal variables', meaning it knows that `2&#96;a + 3&#96;a` is `5&#96;a` (the &#96; symbol indicates a literal variable).
+- It allows for 'literal variables', meaning it knows that ``2 * `a + 3 * `a`` is ``5 * `a`` (the \` symbol indicates a literal variable).
 
 Check out the _Features_ section for more details on these, and other, features, or jump straight to the _Examples_ section to see this in action.
 
